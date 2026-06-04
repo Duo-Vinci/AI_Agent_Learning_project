@@ -47,13 +47,22 @@ Agent 能够：
 ## 示例代码
 
 ```python
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain import hub
+
 tools = [calculator, get_weather]
-agent = initialize_agent(
-    tools, llm,
-    agent=AgentType.OPENAI_FUNCTIONS,
-    verbose=True
-)
-response = agent.run("北京天气怎么样？如果天气好，计算 100+200")
+
+# 获取 ReAct prompt
+prompt = hub.pull("hwchase17/react")
+
+# 创建 agent
+agent = create_react_agent(llm, tools, prompt)
+
+# 创建 agent executor
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+# 执行查询
+response = agent_executor.invoke({"input": "北京天气怎么样？如果天气好，计算 100+200"})
 ```
 
 ## 注意事项

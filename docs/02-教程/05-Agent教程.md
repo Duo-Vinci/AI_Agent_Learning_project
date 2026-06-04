@@ -112,18 +112,21 @@ def get_weather(city: str) -> str:
 
 ```python
 from langchain_openai import ChatOpenAI
-from langchain.agents import initialize_agent, AgentType
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain import hub
 
 llm = ChatOpenAI(model="deepseek-v4-flash", temperature=0)
 
 tools = [calculator, get_weather]
 
-agent = initialize_agent(
-    tools,
-    llm,
-    agent=AgentType.OPENAI_FUNCTIONS,
-    verbose=True
-)
+# 获取 ReAct prompt
+prompt = hub.pull("hwchase17/react")
+
+# 创建 agent
+agent = create_react_agent(llm, tools, prompt)
+
+# 创建 agent executor
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 ```
 
 **作用**：创建智能代理，配置可用工具。
@@ -131,8 +134,8 @@ agent = initialize_agent(
 ### 4.3 执行任务
 
 ```python
-response = agent.run("今天北京天气怎么样？如果天气好的话，计算一下 100 + 200")
-print(response)
+response = agent_executor.invoke({"input": "今天北京天气怎么样？如果天气好的话，计算一下 100 + 200"})
+print(response["output"])
 ```
 
 **作用**：让 Agent 自主规划并执行任务。
@@ -158,13 +161,15 @@ python src/simple_agent.py
 
 ## 六、关键概念
 
-### 6.1 AgentType 选择
+### 6.1 Agent 类型
 
-| 类型 | 说明 |
+LangChain 新版本使用 `create_react_agent` 创建 Agent，基于 ReAct 框架：
+
+| 方法 | 说明 |
 |------|------|
-| `ZERO_SHOT_REACT_DESCRIPTION` | 根据工具描述决定是否调用 |
-| `OPENAI_FUNCTIONS` | 使用 OpenAI 的函数调用能力 |
-| `CHAT_CONVERSATIONAL_REACT_DESCRIPTION` | 支持对话历史 |
+| `create_react_agent` | 使用 ReAct 框架，根据工具描述决定是否调用 |
+| `create_structured_chat_agent` | 支持复杂的多步骤任务 |
+| `create_openai_functions_agent` | 使用 OpenAI 的函数调用能力 |
 
 ### 6.2 工具描述的重要性
 

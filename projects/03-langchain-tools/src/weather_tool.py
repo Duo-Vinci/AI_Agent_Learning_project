@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
-from langchain.agents import initialize_agent, AgentType
+from langgraph.prebuilt import create_react_agent
 
 # 配置日志
 logging.basicConfig(
@@ -67,14 +67,9 @@ def tool_demo():
     tools = [get_weather]
     logger.debug(f"注册的工具列表: {[t.name for t in tools]}")
     
-    # 4. 创建 Agent
+    # 4. 创建 Agent (使用 LangGraph)
     logger.info("步骤4: 创建 Agent")
-    agent = initialize_agent(
-        tools,
-        llm,
-        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True
-    )
+    agent_executor = create_react_agent(llm, tools)
     logger.info("Agent 创建成功")
     
     # 5. 执行查询
@@ -83,10 +78,15 @@ def tool_demo():
     logger.debug(f"用户问题: {question}")
     
     try:
-        result = agent.invoke(question)
+        # LangGraph 使用 messages 而不是 input
+        result = agent_executor.invoke({"messages": [("user", question)]})
+        
         logger.info("Agent 执行成功")
         logger.debug(f"完整响应: {result}")
-        print("\n最终回答:", result["output"])
+        
+        # 提取最后一条消息作为回答
+        final_answer = result["messages"][-1].content
+        print("\n最终回答:", final_answer)
     except Exception as e:
         logger.error(f"Agent 执行失败: {str(e)}", exc_info=True)
         raise

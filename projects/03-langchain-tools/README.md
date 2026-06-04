@@ -40,15 +40,25 @@ python src/weather_tool.py
 
 ```python
 from langchain.tools import tool
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain import hub
 
 @tool
 def get_weather(city: str) -> str:
     """获取指定城市的天气信息"""
     return f"{city}今天天气晴朗"
 
-# 创建代理并调用工具
-agent = initialize_agent([get_weather], llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
-response = agent.run("北京今天天气怎么样？")
+# 获取 ReAct prompt
+prompt = hub.pull("hwchase17/react")
+
+# 创建 agent
+agent = create_react_agent(llm, [get_weather], prompt)
+
+# 创建 agent executor
+agent_executor = AgentExecutor(agent=agent, tools=[get_weather], verbose=True)
+
+# 执行查询
+response = agent_executor.invoke({"input": "北京今天天气怎么样？"})
 ```
 
 ## 注意事项

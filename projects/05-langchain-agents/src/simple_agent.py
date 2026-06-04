@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
-from langchain.agents import initialize_agent, AgentType
+from langgraph.prebuilt import create_react_agent
 
 # 配置日志
 logging.basicConfig(
@@ -76,14 +76,9 @@ def agent_demo():
     tools = [calculate, get_time]
     logger.debug(f"注册的工具列表: {[t.name for t in tools]}")
     
-    # 4. 创建 Agent
+    # 4. 创建 Agent (使用 LangGraph)
     logger.info("步骤4: 创建 Agent")
-    agent = initialize_agent(
-        tools,
-        llm,
-        agent=AgentType.CHAT_ZERO_SHOT_REACT_DESCRIPTION,
-        verbose=True
-    )
+    agent_executor = create_react_agent(llm, tools)
     logger.info("Agent 创建成功")
     
     # 5. 测试1: 数学计算
@@ -91,10 +86,11 @@ def agent_demo():
     question1 = "计算 100 + 200 * 3 的结果"
     logger.debug(f"问题1: {question1}")
     try:
-        result1 = agent.invoke(question1)
+        result1 = agent_executor.invoke({"messages": [("user", question1)]})
         logger.info("测试1 执行成功")
         logger.debug(f"测试1 完整响应: {result1}")
         print("=== 测试1: 数学计算 ===")
+        print(f"回答: {result1['messages'][-1].content}")
     except Exception as e:
         logger.error(f"测试1 执行失败: {str(e)}", exc_info=True)
     
@@ -103,10 +99,11 @@ def agent_demo():
     question2 = "现在几点了？"
     logger.debug(f"问题2: {question2}")
     try:
-        result2 = agent.invoke(question2)
+        result2 = agent_executor.invoke({"messages": [("user", question2)]})
         logger.info("测试2 执行成功")
         logger.debug(f"测试2 完整响应: {result2}")
         print("\n=== 测试2: 获取时间 ===")
+        print(f"回答: {result2['messages'][-1].content}")
     except Exception as e:
         logger.error(f"测试2 执行失败: {str(e)}", exc_info=True)
     
