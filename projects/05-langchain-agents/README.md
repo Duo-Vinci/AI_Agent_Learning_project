@@ -1,28 +1,62 @@
 # LangChain Agents
 
-Agent智能体项目，学习如何构建自主决策的AI系统。
+智能代理项目，演示如何创建能够自主规划和执行任务的 AI 代理。
 
 ## 学习目标
 
-- 理解 Agent 工作原理
-- 学习多种 Agent 类型
-- 掌握复杂任务规划
+- 理解 Agent 的概念
+- 学习如何创建智能代理
+- 掌握多工具协作的流程
 
-## 快速开始
+## 运行步骤
 
 ```bash
+# 安装依赖
 pip install langchain langchain-openai python-dotenv
+
+# 创建 .env 文件
 cp .env.example .env
+# 编辑 .env 添加您的 API Key
+
+# 运行脚本
 python src/simple_agent.py
 ```
 
-## 项目结构
+## 文件结构
 
 ```
-langchain-agents/
+05-langchain-agents/
 ├── src/
-│   └── simple_agent.py
-├── tests/
-├── .env.example
-└── README.md
+│   └── simple_agent.py    # 主脚本
+├── .env.example           # 环境变量示例
+└── README.md              # 项目说明
 ```
+
+## 相关教程
+
+- 对应教程：`docs/02-教程/05-Agent教程.md`
+
+## 核心概念
+
+Agent 能够：
+1. 分析问题
+2. 决定需要什么工具
+3. 调用工具获取信息
+4. 总结结果
+
+## 示例代码
+
+```python
+tools = [calculator, get_weather]
+agent = initialize_agent(
+    tools, llm,
+    agent=AgentType.OPENAI_FUNCTIONS,
+    verbose=True
+)
+response = agent.run("北京天气怎么样？如果天气好，计算 100+200")
+```
+
+## 注意事项
+
+- 工具安全性很重要
+- 注意控制 API 调用成本

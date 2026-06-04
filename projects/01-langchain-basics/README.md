@@ -1,51 +1,57 @@
 # LangChain Basics
 
-LangChain 基础学习项目，涵盖核心概念和基础用法。
+基础入门项目，演示如何调用大语言模型、创建提示词模板和构建执行链。
 
 ## 学习目标
 
-- 了解 LangChain 的核心组件
-- 学习如何使用 ChatOpenAI
-- 掌握提示词模板的使用
-- 理解 Chain 的概念
+- 学习如何配置和调用大语言模型
+- 理解提示词模板的作用
+- 掌握 Chain 的基本概念
 
-## 快速开始
-
-### 安装依赖
+## 运行步骤
 
 ```bash
+# 安装依赖
 pip install langchain langchain-openai python-dotenv
-```
 
-### 配置环境变量
-
-```bash
+# 创建 .env 文件
 cp .env.example .env
-```
+# 编辑 .env 添加您的 API Key
 
-编辑 `.env` 文件：
-
-```
-OPENAI_API_KEY=your-api-key-here
-```
-
-### 运行示例
-
-```bash
+# 运行脚本
 python src/basic_llm.py
 ```
 
-## 项目结构
+## 文件结构
 
 ```
-langchain-basics/
-├── src/           # 源代码
-│   └── basic_llm.py
-├── tests/         # 测试代码
-├── .env.example   # 环境变量模板
-└── README.md
+01-langchain-basics/
+├── src/
+│   └── basic_llm.py    # 主脚本
+├── .env.example        # 环境变量示例
+└── README.md           # 项目说明
 ```
 
-## 学习内容
+## 相关教程
 
-1. **basic_llm.py** - 基础 LLM 调用和提示词模板
+- 对应教程：`docs/02-教程/01-基础入门教程.md`
+
+## 核心代码
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+llm = ChatOpenAI(model="deepseek-v4-flash")
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "你是一个乐于助人的AI助手。"),
+    ("user", "{question}")
+])
+chain = prompt | llm
+response = chain.invoke({"question": "什么是LangChain?"})
+```
+
+## 注意事项
+
+- 确保已配置 API Key
+- 支持 DeepSeek 和 OpenAI 两种 API
