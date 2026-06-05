@@ -1,0 +1,23 @@
+# LangChain Agents 项目依赖
+
+# 核心依赖
+langchain==0.1.0
+langchain-core==0.1.10
+langchain-community==0.0.13
+langchain-openai==0.0.2
+
+# OpenAI 兼容 API
+openai>=1.0.0
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# 工具依赖
+requests==2.31.0
+
+# 可选：搜索工具
+duckduckgo-search==4.1.0
+wikipedia==1.4.0
+
+# 可选：向量数据库（用于带记忆的Agent）
+faiss-cpu==1.7.4

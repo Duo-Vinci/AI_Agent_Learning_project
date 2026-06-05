@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  # Jaeger All-in-One - 分布式追踪
+  jaeger:
+    image: jaegertracing/all-in-one:1.51
+    container_name: jaeger
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      # Jaeger UI
+      - "16686:16686"
+      # Jaeger Collector (HTTP)
+      - "14268:14268"
+      # Jaeger Collector (gRPC)
+      - "14250:14250"
+      # Jaeger Agent (Thrift compact)
+      - "6831:6831/udp"
+      # Jaeger Agent (Thrift binary)
+      - "6832:6832/udp"
+      # Zipkin compatible endpoint
+      - "9411:9411"
+      # OTLP gRPC
+      - "4317:4317"
+      # OTLP HTTP
+      - "4318:4318"
+    networks:
+      - tracing
+    restart: unless-stopped
+
+  # Jaeger Query (可选 - 如果需要单独部署)
+  # jaeger-query:
+  #   image: jaegertracing/jaeger-query:1.51
+  #   container_name: jaeger-query
+  #   environment:
+  #     - SPAN_STORAGE_TYPE=elasticsearch
+  #     - ES_SERVER_URLS=http://elasticsearch:9200
+  #   ports:
+  #     - "16686:16686"
+  #   networks:
+  #     - tracing
+  #   depends_on:
+  #     - elasticsearch
+
+  # OpenTelemetry Collector (可选 - 高级用法)
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "8888:8888"   # Prometheus metrics
+      - "13133:13133" # Health check
+    networks:
+      - tracing
+    depends_on:
+      - jaeger
+    restart: unless-stopped
+
+networks:
+  tracing:
+    driver: bridge

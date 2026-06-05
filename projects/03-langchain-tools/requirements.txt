@@ -1,0 +1,23 @@
+# LangChain 工具使用项目依赖
+
+# 核心依赖
+langchain==0.1.0
+langchain-core==0.1.10
+langchain-community==0.0.13
+langchain-openai==0.0.2
+
+# OpenAI 兼容 API
+openai>=1.0.0
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# 搜索工具（可选）
+duckduckgo-search==4.1.0
+wikipedia==1.4.0
+
+# HTTP请求
+requests==2.31.0
+
+# 数据处理
+pydantic>=2.0.0

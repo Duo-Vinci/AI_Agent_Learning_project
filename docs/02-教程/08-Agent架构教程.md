@@ -758,7 +758,18 @@ agent_executor = AgentExecutor(
 
 ---
 
-## 十一、参考资源
+## 十一、相关资源
+
+- [[知识图谱]] - 完整学习路径导航
+- [[05-Agent教程]] - Agent 基础入门
+- [[03-工具调用教程]] - 工具集成
+- [[09-多Agent系统教程]] - 多Agent协作
+- [[03-Agent设计原则]] - Agent 设计最佳实践
+- [[Agent API迁移指南]] - API 版本变化说明
+
+---
+
+## 十二、参考资源
 
 - [LangChain Agents 文档](https://python.langchain.com/docs/modules/agents/)
 - [ReAct 论文](https://arxiv.org/abs/2210.03629)

@@ -1,0 +1,27 @@
+# Python Fundamentals for AI Agent Development
+# 异步编程相关
+aiohttp>=3.9.0
+httpx>=0.27.0
+asyncio-throttle>=1.0.0
+
+# LLM 和 AI 框架
+openai>=1.12.0
+anthropic>=0.25.0
+
+# 类型检查
+mypy>=1.8.0
+typing-extensions>=4.9.0
+
+# 开发工具
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# 工具库
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+tenacity>=8.2.0
+
+# 日志和监控
+loguru>=0.7.0
+rich>=13.7.0

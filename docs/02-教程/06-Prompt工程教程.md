@@ -405,7 +405,16 @@ python src/03-chain-of-thought/reasoning.py
 
 ---
 
-## 十二、参考资源
+## 十二、相关资源
+
+- [[知识图谱]] - 完整学习路径导航
+- [[01-Prompt设计模式]] - Prompt 设计最佳实践
+- [[05-Agent教程]] - Agent 开发中 Prompt 的应用
+- [[LangChain家族包详解]] - 包依赖关系
+
+---
+
+## 十三、参考资源
 
 - [OpenAI Prompt Engineering Guide](https://platform.openai.com/docs/guides/prompt-engineering)
 - [Anthropic Prompt Library](https://docs.anthropic.com/claude/prompt-library)

@@ -1,0 +1,28 @@
+# LangChain RAG 项目依赖
+
+# 核心依赖
+langchain==0.1.0
+langchain-core==0.1.10
+langchain-community==0.0.13
+langchain-openai==0.0.2
+
+# OpenAI 兼容 API
+openai>=1.0.0
+
+# 向量数据库
+faiss-cpu==1.7.4
+# 或使用 GPU 版本: faiss-gpu==1.7.4
+
+# 文档加载器
+pypdf==3.17.1
+python-docx==1.1.0
+beautifulsoup4==4.12.2
+
+# 文本处理
+tiktoken==0.5.2
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# 其他工具
+requests==2.31.0

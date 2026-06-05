@@ -1,0 +1,47 @@
+# Prometheus 告警规则配置（简化版）
+
+# 需要将此文件路径添加到 prometheus.yml 的 rule_files 部分
+
+groups:
+  - name: agent_basic_alerts
+    interval: 30s
+    rules:
+      # 高错误率
+      - alert: HighErrorRate
+        expr: rate(agent_requests_total{status="error"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 错误率过高"
+          description: "错误率为 {{ $value | humanizePercentage }}"
+
+      # 高延迟
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(agent_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent 响应延迟过高"
+          description: "P95 延迟为 {{ $value }}s"
+
+      # LLM 成本过高
+      - alert: HighLLMCost
+        expr: increase(llm_cost_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM 成本过高"
+          description: "过去 1 小时成本: ${{ $value }}"
+
+      # 服务宕机
+      - alert: AgentDown
+        expr: up{job="ai-agent-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent 服务宕机"
+          description: "{{ $labels.instance }} 不可用"

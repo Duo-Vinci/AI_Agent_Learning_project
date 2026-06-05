@@ -1,0 +1,230 @@
+# Serverless Framework 配置
+# 用于部署 AWS Lambda 函数
+
+service: ai-agent-serverless
+
+# Serverless Framework 版本
+frameworkVersion: '3'
+
+# 云服务提供商配置
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}  # 默认 dev 环境
+
+  # Lambda 函数配置
+  memorySize: 2048  # 2 GB 内存
+  timeout: 30  # 30 秒超时
+  architecture: arm64  # 使用 ARM64 架构（Graviton2，性价比更高）
+
+  # 环境变量
+  environment:
+    ENV: ${self:provider.stage}
+    LOG_LEVEL: INFO
+    PYTHONPATH: /var/task
+
+  # IAM 角色权限
+  iam:
+    role:
+      statements:
+        # Secrets Manager 访问权限
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource: "arn:aws:secretsmanager:${self:provider.region}:*:secret:ai-agent/*"
+
+        # DynamoDB 访问权限
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:service}-*"
+
+        # S3 访问权限
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+          Resource: "arn:aws:s3:::${self:service}-bucket/*"
+
+  # API Gateway 配置
+  httpApi:
+    cors: true
+    metrics: true
+
+  # CloudWatch 日志
+  logs:
+    httpApi: true
+
+  # X-Ray 跟踪
+  tracing:
+    lambda: true
+    apiGateway: true
+
+# Lambda 函数定义
+functions:
+  # 主 API 函数
+  api:
+    handler: lambda_handler.lambda_handler
+    name: ${self:service}-api-${self:provider.stage}
+    description: AI Agent API - FastAPI Lambda Adapter
+
+    # HTTP API 事件触发
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+      - httpApi:
+          path: /
+          method: ANY
+
+    # 预留并发（避免冷启动）
+    reservedConcurrency: 5
+
+    # 环境变量（函数特定）
+    environment:
+      FUNCTION_NAME: api
+
+  # 预热函数（减少冷启动）
+  warmer:
+    handler: lambda_handler.warm_handler
+    name: ${self:service}-warmer-${self:provider.stage}
+    description: Lambda 预热函数
+
+    # CloudWatch Events 定时触发
+    events:
+      - schedule:
+          rate: rate(5 minutes)  # 每 5 分钟触发一次
+          enabled: true
+
+  # 异步任务处理函数
+  worker:
+    handler: worker_handler.handler
+    name: ${self:service}-worker-${self:provider.stage}
+    description: 异步任务处理
+
+    # SQS 事件触发
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - TaskQueue
+              - Arn
+          batchSize: 10
+          maximumBatchingWindowInSeconds: 5
+
+# 插件
+plugins:
+  - serverless-python-requirements  # Python 依赖打包
+  - serverless-plugin-warmup  # 预热插件
+  - serverless-offline  # 本地开发
+  - serverless-dotenv-plugin  # .env 文件支持
+
+# 自定义配置
+custom:
+  # Python 依赖打包配置
+  pythonRequirements:
+    dockerizePip: true  # 使用 Docker 构建，确保兼容性
+    slim: true  # 移除不必要的文件
+    strip: false
+    zip: true  # 压缩依赖
+    layer: true  # 创建 Lambda Layer
+    useStaticCache: true
+    useDownloadCache: true
+
+    # 排除开发依赖
+    noDeploy:
+      - pytest
+      - black
+      - flake8
+      - mypy
+
+  # 预热配置
+  warmup:
+    default:
+      enabled: true
+      events:
+        - schedule: 'rate(5 minutes)'
+      concurrency: 2
+
+  # 本地开发配置
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+
+# AWS 资源定义
+resources:
+  Resources:
+    # SQS 队列
+    TaskQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-tasks-${self:provider.stage}
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 345600  # 4 天
+
+    # DynamoDB 表
+    SessionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:service}-sessions-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST  # 按需付费
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: sessionId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: sessionId
+            KeyType: RANGE
+
+    # S3 存储桶
+    DataBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-data-${self:provider.stage}
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+  # 输出
+  Outputs:
+    ApiUrl:
+      Description: API Gateway URL
+      Value:
+        Fn::Sub: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+
+    QueueUrl:
+      Description: SQS Queue URL
+      Value:
+        Ref: TaskQueue
+
+    BucketName:
+      Description: S3 Bucket Name
+      Value:
+        Ref: DataBucket
+
+# 打包配置
+package:
+  individually: true  # 每个函数单独打包
+  patterns:
+    - '!.git/**'
+    - '!.vscode/**'
+    - '!tests/**'
+    - '!docs/**'
+    - '!*.md'
+    - '!.env*'
+    - 'app/**'
+    - 'config/**'
+    - 'lambda_handler.py'
+    - 'worker_handler.py'

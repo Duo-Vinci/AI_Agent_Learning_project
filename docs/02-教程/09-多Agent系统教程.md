@@ -774,7 +774,16 @@ python src/07-autonomous-team/self_organizing.py
 
 ---
 
-## 十一、参考资源
+## 十一、相关资源
+
+- [[知识图谱]] - 完整学习路径导航
+- [[05-Agent教程]] - Agent 基础入门
+- [[08-Agent架构教程]] - Agent 架构设计
+- [[03-Agent设计原则]] - Agent 设计最佳实践
+
+---
+
+## 十二、参考资源
 
 - [AutoGen 文档](https://microsoft.github.io/autogen/)
 - [CrewAI 文档](https://docs.crewai.com/)

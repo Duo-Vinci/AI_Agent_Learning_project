@@ -1,0 +1,303 @@
+# Prometheus 告警规则配置
+
+groups:
+  # Agent 服务告警组
+  - name: agent_service_alerts
+    interval: 30s
+    rules:
+      # 高错误率告警
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(agent_requests_total{status="error"}[5m])) by (agent_id)
+            /
+            sum(rate(agent_requests_total[5m])) by (agent_id)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-api
+        annotations:
+          summary: "Agent {{ $labels.agent_id }} 错误率过高"
+          description: "Agent {{ $labels.agent_id }} 在过去5分钟的错误率为 {{ $value | humanizePercentage }}，超过阈值 5%"
+
+      # 严重错误率告警
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(agent_requests_total{status="error"}[5m])) by (agent_id)
+            /
+            sum(rate(agent_requests_total[5m])) by (agent_id)
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+          service: agent-api
+        annotations:
+          summary: "Agent {{ $labels.agent_id }} 错误率严重过高"
+          description: "Agent {{ $labels.agent_id }} 错误率达到 {{ $value | humanizePercentage }}，需要立即处理！"
+
+      # 高延迟告警 (P95)
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            rate(agent_request_duration_seconds_bucket[5m])
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: agent-api
+        annotations:
+          summary: "Agent {{ $labels.agent_id }} 响应延迟过高"
+          description: "Agent {{ $labels.agent_id }} 的 P95 延迟为 {{ $value | humanizeDuration }}，超过 10 秒"
+
+      # 极高延迟告警 (P99)
+      - alert: VeryHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            rate(agent_request_duration_seconds_bucket[5m])
+          ) > 30
+        for: 3m
+        labels:
+          severity: critical
+          service: agent-api
+        annotations:
+          summary: "Agent {{ $labels.agent_id }} 延迟极高"
+          description: "P99 延迟达到 {{ $value | humanizeDuration }}，严重影响用户体验"
+
+      # Agent 服务宕机
+      - alert: AgentServiceDown
+        expr: up{job="ai-agent-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: agent-api
+        annotations:
+          summary: "Agent 服务宕机"
+          description: "Agent 实例 {{ $labels.instance }} 已宕机超过 1 分钟"
+
+      # 无请求流量（可能异常）
+      - alert: NoTraffic
+        expr: |
+          sum(rate(agent_requests_total[5m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: agent-api
+        annotations:
+          summary: "Agent 服务无流量"
+          description: "在过去 10 分钟内没有收到任何请求，请检查服务状态"
+
+  # LLM 成本和使用告警
+  - name: llm_cost_alerts
+    interval: 1m
+    rules:
+      # 每小时成本过高
+      - alert: HighLLMCostPerHour
+        expr: increase(llm_cost_total[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: cost
+        annotations:
+          summary: "LLM 使用成本过高"
+          description: "过去 1 小时的 LLM 成本为 ${{ $value | humanize }}，超过预算阈值 $10"
+          current_cost: "{{ $value }}"
+          budget_limit: "10"
+
+      # 每日成本严重超标
+      - alert: CriticalLLMCostPerDay
+        expr: increase(llm_cost_total[24h]) > 100
+        for: 10m
+        labels:
+          severity: critical
+          category: cost
+        annotations:
+          summary: "LLM 日成本严重超标"
+          description: "24 小时内 LLM 成本已达 ${{ $value | humanize }}，超过每日预算 $100"
+
+      # Token 使用激增
+      - alert: TokenUsageSpike
+        expr: |
+          rate(llm_tokens_total[5m])
+          >
+          2 * avg_over_time(rate(llm_tokens_total[5m])[1h:5m])
+        for: 10m
+        labels:
+          severity: warning
+          category: usage
+        annotations:
+          summary: "LLM Token 使用量激增"
+          description: "{{ $labels.model }} 的 Token 使用速率是过去 1 小时平均值的 2 倍以上"
+
+      # LLM 调用失败率高
+      - alert: HighLLMFailureRate
+        expr: |
+          (
+            sum(rate(llm_calls_total{status="error"}[5m])) by (model)
+            /
+            sum(rate(llm_calls_total[5m])) by (model)
+          ) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          service: llm
+        annotations:
+          summary: "LLM 调用失败率过高"
+          description: "模型 {{ $labels.model }} 的调用失败率为 {{ $value | humanizePercentage }}"
+
+  # 系统资源告警
+  - name: system_resource_alerts
+    interval: 1m
+    rules:
+      # 磁盘空间不足
+      - alert: LowDiskSpace
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.10
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "磁盘空间不足"
+          description: "{{ $labels.instance }} 的根分区只剩 {{ $value | humanizePercentage }} 可用空间"
+
+      # 磁盘空间严重不足
+      - alert: CriticalDiskSpace
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            /
+            node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.05
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "磁盘空间严重不足"
+          description: "仅剩 {{ $value | humanizePercentage }} 可用空间，需要立即清理"
+
+      # 内存使用率过高
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+          ) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "内存使用率过高"
+          description: "{{ $labels.instance }} 内存使用率为 {{ $value | humanizePercentage }}"
+
+      # CPU 使用率持续高负载
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "CPU 使用率持续过高"
+          description: "{{ $labels.instance }} CPU 使用率为 {{ $value | humanize }}%，持续 10 分钟以上"
+
+  # 缓存性能告警
+  - name: cache_alerts
+    interval: 1m
+    rules:
+      # 缓存命中率低
+      - alert: LowCacheHitRate
+        expr: |
+          (
+            sum(rate(cache_operations_total{result="hit"}[5m]))
+            /
+            sum(rate(cache_operations_total{operation="get"}[5m]))
+          ) < 0.50
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "缓存命中率过低"
+          description: "缓存命中率仅为 {{ $value | humanizePercentage }}，建议检查缓存策略"
+
+      # 缓存错误率高
+      - alert: HighCacheErrorRate
+        expr: |
+          rate(cache_operations_total{result="error"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "缓存错误率过高"
+          description: "缓存错误率为 {{ $value }} 次/秒，请检查缓存服务"
+
+  # 工具调用告警
+  - name: tool_alerts
+    interval: 1m
+    rules:
+      # 工具调用失败率高
+      - alert: HighToolFailureRate
+        expr: |
+          (
+            sum(rate(tool_calls_total{status="error"}[5m])) by (tool_name)
+            /
+            sum(rate(tool_calls_total[5m])) by (tool_name)
+          ) > 0.20
+        for: 5m
+        labels:
+          severity: warning
+          category: tools
+        annotations:
+          summary: "工具 {{ $labels.tool_name }} 失败率过高"
+          description: "工具调用失败率为 {{ $value | humanizePercentage }}"
+
+      # 工具响应慢
+      - alert: SlowToolResponse
+        expr: |
+          histogram_quantile(0.95,
+            rate(tool_call_duration_seconds_bucket[5m])
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "工具 {{ $labels.tool_name }} 响应缓慢"
+          description: "P95 响应时间为 {{ $value | humanizeDuration }}"
+
+  # 数据库告警
+  - name: database_alerts
+    interval: 1m
+    rules:
+      # PostgreSQL 连接数过多
+      - alert: TooManyDatabaseConnections
+        expr: |
+          pg_stat_database_numbackends / pg_settings_max_connections > 0.80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "数据库连接数过多"
+          description: "当前使用了 {{ $value | humanizePercentage }} 的最大连接数"
+
+      # Redis 内存使用率高
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Redis 内存使用率过高"
+          description: "Redis 内存使用率为 {{ $value | humanizePercentage }}"

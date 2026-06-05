@@ -1,0 +1,174 @@
+# 阿里云 ACK (容器服务 Kubernetes) 部署配置
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-agent
+  labels:
+    name: ai-agent
+
+---
+# Secret - 阿里云容器镜像服务凭证
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aliyun-acr-secret
+  namespace: ai-agent
+type: kubernetes.io/dockerconfigjson
+data:
+  # Base64 编码的 Docker 配置
+  # 格式: {"auths":{"registry.cn-hangzhou.aliyuncs.com":{"username":"your-username","password":"your-password"}}}
+  .dockerconfigjson: <base64-encoded-docker-config>
+
+---
+# ConfigMap - 应用配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-agent-config
+  namespace: ai-agent
+data:
+  ENV: "production"
+  LOG_LEVEL: "INFO"
+  REGION: "cn-hangzhou"
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agent
+  namespace: ai-agent
+  labels:
+    app: ai-agent
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ai-agent
+  template:
+    metadata:
+      labels:
+        app: ai-agent
+    spec:
+      # 使用阿里云 ACR 镜像拉取凭证
+      imagePullSecrets:
+      - name: aliyun-acr-secret
+
+      containers:
+      - name: agent-api
+        # 阿里云容器镜像服务地址
+        image: registry.cn-hangzhou.aliyuncs.com/your-namespace/ai-agent:latest
+        imagePullPolicy: Always
+
+        ports:
+        - name: http
+          containerPort: 8000
+
+        # 从 ConfigMap 加载配置
+        envFrom:
+        - configMapRef:
+            name: ai-agent-config
+        - secretRef:
+            name: ai-agent-secrets
+
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# Service - 使用阿里云 SLB (负载均衡)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-service
+  namespace: ai-agent
+  annotations:
+    # 阿里云 SLB 配置
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-spec: "slb.s2.small"
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-charge-type: "paybytraffic"
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-health-check-flag: "on"
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-health-check-type: "http"
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-health-check-uri: "/health"
+spec:
+  type: LoadBalancer
+  selector:
+    app: ai-agent
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+
+---
+# Ingress - 阿里云 ALB (应用负载均衡)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-agent-ingress
+  namespace: ai-agent
+  annotations:
+    # 使用阿里云 Ingress Controller
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+spec:
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-agent-service
+            port:
+              number: 80
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-agent-hpa
+  namespace: ai-agent
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-agent
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

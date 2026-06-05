@@ -1,0 +1,194 @@
+# AlertManager 配置文件
+
+# 全局配置
+global:
+  # 告警解决超时时间
+  resolve_timeout: 5m
+
+  # Slack 配置
+  slack_api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+
+  # 邮件配置
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@example.com'
+  smtp_auth_username: 'alerts@example.com'
+  smtp_auth_password: 'your_password'
+  smtp_require_tls: true
+
+# 告警模板
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# 路由配置
+route:
+  # 根路由配置
+  receiver: 'default'
+
+  # 分组配置（相同标签的告警会合并）
+  group_by: ['alertname', 'cluster', 'service']
+
+  # 组等待时间（收到第一个告警后等待更多相同组的告警）
+  group_wait: 10s
+
+  # 组间隔时间（发送新告警组前的等待时间）
+  group_interval: 10s
+
+  # 重复间隔（重复发送未解决告警的间隔）
+  repeat_interval: 12h
+
+  # 子路由
+  routes:
+    # 严重告警 - 立即通知多个渠道
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 4h
+      continue: false
+
+    # 警告告警 - Slack 通知
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 12h
+
+    # LLM 成本告警
+    - match:
+        alertname: 'HighLLMCost'
+      receiver: 'cost-alerts'
+      group_wait: 1m
+      repeat_interval: 1h
+
+    # 数据库相关告警
+    - match_re:
+        service: '^(postgres|redis|mongo).*'
+      receiver: 'database-alerts'
+
+    # 夜间低优先级告警（晚上11点到早上8点）
+    - match:
+        severity: info
+      receiver: 'low-priority'
+      time_intervals:
+        - weekday_night
+      group_wait: 5m
+      repeat_interval: 24h
+
+# 抑制规则（某些告警触发时抑制其他告警）
+inhibit_rules:
+  # 服务宕机时抑制其他所有该服务的告警
+  - source_match:
+      severity: 'critical'
+      alertname: 'ServiceDown'
+    target_match:
+      severity: 'warning'
+    equal: ['service', 'instance']
+
+  # Agent 宕机时抑制高延迟告警
+  - source_match:
+      alertname: 'AgentDown'
+    target_match:
+      alertname: 'HighLatency'
+    equal: ['agent_id']
+
+# 接收器配置
+receivers:
+  # 默认接收器
+  - name: 'default'
+    email_configs:
+      - to: 'team@example.com'
+        headers:
+          Subject: '[Alert] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+
+  # 严重告警 - 多渠道通知
+  - name: 'critical-alerts'
+    # Slack 通知
+    slack_configs:
+      - channel: '#alerts-critical'
+        title: '🚨 严重告警'
+        text: |
+          *告警名称:* {{ .GroupLabels.alertname }}
+          *严重程度:* {{ .CommonLabels.severity }}
+          *服务:* {{ .CommonLabels.service }}
+
+          {{ range .Alerts }}
+          *描述:* {{ .Annotations.description }}
+          *详情:* {{ .Annotations.summary }}
+          {{ end }}
+        actions:
+          - type: button
+            text: '查看 Grafana 📊'
+            url: 'http://grafana:3000/d/ai-agent-dashboard'
+          - type: button
+            text: '查看日志 📝'
+            url: 'http://kibana:5601'
+
+    # PagerDuty 告警（值班人员）
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
+
+    # 邮件通知
+    email_configs:
+      - to: 'oncall@example.com'
+        headers:
+          Subject: '🚨 [CRITICAL] {{ .GroupLabels.alertname }}'
+
+  # 警告告警
+  - name: 'warning-alerts'
+    slack_configs:
+      - channel: '#alerts-warning'
+        title: '⚠️ 警告告警'
+        text: |
+          {{ range .Alerts }}
+          *告警:* {{ .Annotations.summary }}
+          *详情:* {{ .Annotations.description }}
+          {{ end }}
+        color: 'warning'
+
+  # 成本告警
+  - name: 'cost-alerts'
+    slack_configs:
+      - channel: '#cost-monitoring'
+        title: '💰 成本告警'
+        text: |
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          当前成本: ${{ .Annotations.current_cost }}
+          预算限制: ${{ .Annotations.budget_limit }}
+          {{ end }}
+
+    email_configs:
+      - to: 'finance@example.com,tech-lead@example.com'
+        headers:
+          Subject: '[Cost Alert] LLM Usage Exceeded Budget'
+
+  # 数据库告警
+  - name: 'database-alerts'
+    slack_configs:
+      - channel: '#database-alerts'
+        title: '🗄️ 数据库告警'
+        text: '{{ .Annotations.summary }}: {{ .Annotations.description }}'
+
+  # 低优先级告警
+  - name: 'low-priority'
+    email_configs:
+      - to: 'team@example.com'
+        send_resolved: true
+
+# 时间间隔定义
+time_intervals:
+  # 工作日夜间（周一到周五，晚上11点到早上8点）
+  - name: weekday_night
+    time_intervals:
+      - times:
+          - start_time: '23:00'
+            end_time: '08:00'
+        weekdays: ['monday:friday']
+
+  # 周末
+  - name: weekend
+    time_intervals:
+      - weekdays: ['saturday', 'sunday']

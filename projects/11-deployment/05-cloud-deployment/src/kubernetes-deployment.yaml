@@ -1,0 +1,367 @@
+# Kubernetes Deployment 配置
+# 用于在 K8s 集群中部署 AI Agent 应用
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-agent
+  labels:
+    name: ai-agent
+    environment: production
+
+---
+# Deployment - 应用部署
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-agent-deployment
+  namespace: ai-agent
+  labels:
+    app: ai-agent
+    version: v1
+spec:
+  # 副本数
+  replicas: 3
+
+  # 滚动更新策略
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1  # 最多可以多创建 1 个 Pod
+      maxUnavailable: 0  # 最多不可用的 Pod 数量
+
+  # 选择器
+  selector:
+    matchLabels:
+      app: ai-agent
+
+  # Pod 模板
+  template:
+    metadata:
+      labels:
+        app: ai-agent
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      # 服务账号
+      serviceAccountName: ai-agent-sa
+
+      # 容器配置
+      containers:
+      - name: agent-api
+        image: ghcr.io/your-org/ai-agent:latest
+        imagePullPolicy: Always
+
+        # 端口
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+
+        # 环境变量
+        env:
+        - name: ENV
+          value: "production"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+
+        # 从 Secret 加载敏感信息
+        envFrom:
+        - secretRef:
+            name: ai-agent-secrets
+        - configMapRef:
+            name: ai-agent-config
+
+        # 资源限制
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+
+        # 启动探针
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 30
+
+        # 挂载卷
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: logs
+          mountPath: /app/logs
+
+      # 卷定义
+      volumes:
+      - name: config
+        configMap:
+          name: ai-agent-config
+      - name: logs
+        emptyDir: {}
+
+      # 镜像拉取密钥
+      imagePullSecrets:
+      - name: ghcr-secret
+
+      # Pod 反亲和性（分散到不同节点）
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - ai-agent
+              topologyKey: kubernetes.io/hostname
+
+---
+# Service - 服务暴露
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-agent-service
+  namespace: ai-agent
+  labels:
+    app: ai-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-agent
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  sessionAffinity: ClientIP  # 会话保持
+
+---
+# HorizontalPodAutoscaler - 水平自动扩缩容
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-agent-hpa
+  namespace: ai-agent
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-agent-deployment
+
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+  # CPU 使用率
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # 内存使用率
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # 自定义指标 - 请求延迟
+  - type: Pods
+    pods:
+      metric:
+        name: http_request_duration_seconds
+      target:
+        type: AverageValue
+        averageValue: "500m"
+
+  # 扩缩容行为
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 分钟稳定窗口
+      policies:
+      - type: Percent
+        value: 50  # 每次最多缩容 50%
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100  # 每次最多扩容 100%
+        periodSeconds: 30
+      - type: Pods
+        value: 2  # 每次最多增加 2 个 Pod
+        periodSeconds: 60
+      selectPolicy: Max
+
+---
+# Ingress - 入口配置
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-agent-ingress
+  namespace: ai-agent
+  annotations:
+    # 使用 nginx ingress controller
+    kubernetes.io/ingress.class: nginx
+
+    # SSL 重定向
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # 限流
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # 跨域
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+
+    # 超时设置
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Let's Encrypt 证书
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+spec:
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: ai-agent-tls
+
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-agent-service
+            port:
+              number: 80
+
+---
+# ServiceAccount - 服务账号
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-agent-sa
+  namespace: ai-agent
+
+---
+# ConfigMap - 配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-agent-config
+  namespace: ai-agent
+data:
+  app.yaml: |
+    app:
+      name: ai-agent
+      version: 1.0.0
+      environment: production
+
+    server:
+      host: 0.0.0.0
+      port: 8000
+      workers: 4
+
+    logging:
+      level: INFO
+      format: json
+
+---
+# PodDisruptionBudget - Pod 中断预算
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-agent-pdb
+  namespace: ai-agent
+spec:
+  minAvailable: 1  # 至少保持 1 个 Pod 运行
+  selector:
+    matchLabels:
+      app: ai-agent
+
+---
+# NetworkPolicy - 网络策略
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-agent-netpol
+  namespace: ai-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-agent
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis

@@ -1,0 +1,107 @@
+# Filebeat 配置文件
+
+# Filebeat 输入配置
+filebeat.inputs:
+  # 读取 AI Agent 应用日志
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/agent/*.log
+
+    # JSON 格式解析
+    json:
+      keys_under_root: true
+      add_error_key: true
+      message_key: message
+
+    # 字段配置
+    fields:
+      service: ai-agent
+      log_type: application
+    fields_under_root: true
+
+    # 多行日志处理（堆栈跟踪）
+    multiline:
+      pattern: '^\s+'
+      negate: false
+      match: after
+
+  # Docker 容器日志
+  - type: container
+    enabled: true
+    paths:
+      - /var/lib/docker/containers/*/*.log
+
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+
+      - decode_json_fields:
+          fields: ["message"]
+          target: ""
+          overwrite_keys: true
+
+# Filebeat 模块
+filebeat.config.modules:
+  path: ${path.config}/modules.d/*.yml
+  reload.enabled: false
+
+# 处理器配置
+processors:
+  # 添加主机信息
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+
+  # 添加 Docker 元数据
+  - add_docker_metadata: ~
+
+  # 添加 Kubernetes 元数据（如果在 K8s 环境）
+  # - add_kubernetes_metadata: ~
+
+  # 删除空字段
+  - drop_fields:
+      fields: ["agent.ephemeral_id", "agent.id", "ecs.version"]
+      ignore_missing: true
+
+# 输出配置 - 发送到 Logstash
+output.logstash:
+  hosts: ["logstash:5044"]
+
+  # 负载均衡
+  loadbalance: true
+
+  # 批量发送配置
+  bulk_max_size: 2048
+
+  # 压缩
+  compression_level: 3
+
+# 或者直接输出到 Elasticsearch（可选）
+# output.elasticsearch:
+#   hosts: ["elasticsearch:9200"]
+#   indices:
+#     - index: "agent-logs-%{+yyyy.MM.dd}"
+#       when.contains:
+#         service: "ai-agent"
+#
+#   # 模板配置
+#   setup.template.name: "agent-logs"
+#   setup.template.pattern: "agent-logs-*"
+
+# 日志级别
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+# Kibana 配置（用于设置索引模式和仪表板）
+setup.kibana:
+  host: "kibana:5601"
+
+# 索引生命周期管理
+setup.ilm.enabled: true
+setup.ilm.rollover_alias: "filebeat"
+setup.ilm.pattern: "{now/d}-000001"

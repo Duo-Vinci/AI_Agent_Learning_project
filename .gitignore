@@ -23,3 +23,7 @@ Thumbs.db
 
 *.log
 *.log.*
+
+# Obsidian
+.obsidian/
+.codegraph/

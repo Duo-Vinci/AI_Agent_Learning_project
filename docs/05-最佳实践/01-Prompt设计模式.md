@@ -895,7 +895,15 @@ result = tester.run_test(
 print(tester.generate_report())
 ```
 
-## 8. 参考资源
+## 8. 相关资源
+
+- [[知识图谱]] - 完整学习路径导航
+- [[06-Prompt工程教程]] - Prompt 工程教程
+- [[05-Agent教程]] - Agent 开发中 Prompt 的应用
+
+---
+
+## 9. 参考资源
 
 - OpenAI Prompt Engineering Guide
 - Anthropic Prompt Engineering Tutorial

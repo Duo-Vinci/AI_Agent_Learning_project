@@ -1,0 +1,98 @@
+# 开发环境 Docker Compose 配置
+# 用于本地开发，包含热重载和调试功能
+
+version: '3.8'
+
+services:
+  # 开发环境 API 服务
+  agent-api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: agent-api-dev
+    ports:
+      - "8000:8000"
+      - "5678:5678"  # Python 调试端口
+    environment:
+      - ENV=development
+      - LOG_LEVEL=DEBUG
+      - RELOAD=true  # 启用热重载
+      - DATABASE_URL=postgresql://postgres:devpassword@postgres-dev:5432/agentdb_dev
+      - REDIS_URL=redis://redis-dev:6379/0
+    env_file:
+      - .env.dev
+    volumes:
+      # 挂载源码实现热重载
+      - ./app:/app/app:ro
+      - ./config:/app/config:ro
+      - ./tests:/app/tests:ro
+    depends_on:
+      - postgres-dev
+      - redis-dev
+    restart: unless-stopped
+    networks:
+      - agent-dev-network
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --log-level debug
+
+  # 开发数据库
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: agent-postgres-dev
+    environment:
+      - POSTGRES_DB=agentdb_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=devpassword
+    ports:
+      - "5433:5432"  # 使用不同端口避免冲突
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    networks:
+      - agent-dev-network
+
+  # 开发 Redis
+  redis-dev:
+    image: redis:7-alpine
+    container_name: agent-redis-dev
+    ports:
+      - "6380:6379"
+    networks:
+      - agent-dev-network
+
+  # PGAdmin 数据库管理工具
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: agent-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@example.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres-dev
+    networks:
+      - agent-dev-network
+
+  # Redis Commander 管理工具
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: agent-redis-commander
+    environment:
+      - REDIS_HOSTS=local:redis-dev:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis-dev
+    networks:
+      - agent-dev-network
+
+networks:
+  agent-dev-network:
+    driver: bridge
+
+volumes:
+  postgres-dev-data:

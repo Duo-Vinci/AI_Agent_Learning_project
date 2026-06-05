@@ -556,7 +556,17 @@ if should_rebuild():
 
 ---
 
-## 十四、参考资源
+## 十四、相关资源
+
+- [[知识图谱]] - 完整学习路径导航
+- [[04-RAG教程]] - RAG 基础入门
+- [[02-RAG系统优化]] - RAG 优化最佳实践
+- [[01-Prompt设计模式]] - Prompt 工程技巧
+- [[LangChain家族包详解]] - 包依赖关系
+
+---
+
+## 十五、参考资源
 
 - [LangChain RAG 文档](https://python.langchain.com/docs/use_cases/question_answering/)
 - [向量数据库对比](https://www.pinecone.io/learn/vector-database/)

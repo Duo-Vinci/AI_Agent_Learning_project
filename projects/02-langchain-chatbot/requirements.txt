@@ -1,0 +1,22 @@
+# LangChain 聊天机器人项目依赖
+
+# 核心依赖
+langchain==0.1.0
+langchain-core==0.1.10
+langchain-community==0.0.13
+langchain-openai==0.0.2
+
+# OpenAI 兼容 API
+openai>=1.0.0
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# Web 界面（可选）
+streamlit==1.29.0
+
+# 数据库
+sqlite3  # Python 内置，无需安装
+
+# 其他工具
+requests==2.31.0

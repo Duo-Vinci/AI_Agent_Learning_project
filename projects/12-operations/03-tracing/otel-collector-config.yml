@@ -1,0 +1,116 @@
+# OpenTelemetry Collector 配置
+
+receivers:
+  # OTLP 接收器（支持 gRPC 和 HTTP）
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Jaeger 接收器（兼容 Jaeger 客户端）
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+      thrift_compact:
+        endpoint: 0.0.0.0:6831
+
+  # Zipkin 接收器（兼容 Zipkin 客户端）
+  zipkin:
+    endpoint: 0.0.0.0:9411
+
+processors:
+  # 批处理（提高性能）
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # 内存限制器（防止 OOM）
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # 资源检测
+  resourcedetection:
+    detectors: [env, system, docker]
+
+  # 属性处理
+  attributes:
+    actions:
+      - key: environment
+        value: production
+        action: insert
+      - key: service.namespace
+        value: ai-agents
+        action: insert
+
+  # Span 过滤（可选 - 过滤掉健康检查等噪音）
+  filter:
+    traces:
+      span:
+        # 排除健康检查
+        - 'attributes["http.target"] == "/health"'
+        - 'attributes["http.target"] == "/metrics"'
+
+exporters:
+  # Jaeger 导出器
+  jaeger:
+    endpoint: jaeger:14250
+    tls:
+      insecure: true
+
+  # 日志导出（调试用）
+  logging:
+    loglevel: info
+
+  # Prometheus 导出（将追踪数据转换为指标）
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: otel
+    const_labels:
+      service: ai-agent
+
+  # Zipkin 导出（可选）
+  # zipkin:
+  #   endpoint: "http://zipkin:9411/api/v2/spans"
+
+extensions:
+  # 健康检查
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  # pprof 性能分析
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+  # zpages 调试页面
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+
+  pipelines:
+    # 追踪管道
+    traces:
+      receivers: [otlp, jaeger, zipkin]
+      processors: [memory_limiter, resourcedetection, attributes, batch]
+      exporters: [jaeger, logging]
+
+    # 指标管道（可选）
+    # metrics:
+    #   receivers: [otlp]
+    #   processors: [memory_limiter, batch]
+    #   exporters: [prometheus, logging]
+
+  # 遥测配置
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
